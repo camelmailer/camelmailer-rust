@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping improve the CamelMailer Rust SDK!
+Thanks for helping improve the Camelmailer Rust SDK!
 
 ## Development setup
 

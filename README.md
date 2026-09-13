@@ -5,7 +5,7 @@
 [![docs.rs](https://img.shields.io/docsrs/camelmailer-rs)](https://docs.rs/camelmailer-rs)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Rust SDK for [CamelMailer](https://camelmailer.com) — the open-source transactional email platform. Async-first (reqwest + rustls, no OpenSSL), fully typed, MSRV 1.75.
+Rust SDK for [Camelmailer](https://camelmailer.com) — the open-source transactional email platform. Async-first (reqwest + rustls, no OpenSSL), fully typed, MSRV 1.75.
 
 ## Install
 
@@ -35,7 +35,7 @@ async fn main() -> Result<(), camelmailer_rs::Error> {
 
 ## Self-hosted? Set your base URL
 
-The client talks to the CamelMailer cloud (`https://app.camelmailer.com`) by default:
+The client talks to the Camelmailer cloud (`https://app.camelmailer.com`) by default:
 
 ```rust,no_run
 let client = camelmailer_rs::CamelMailer::builder("cm_xxxxxxxx")
@@ -184,7 +184,7 @@ let result = client.emails().send(
 ## Docs
 
 - API reference: <https://docs.rs/camelmailer-rs>
-- CamelMailer docs: <https://camelmailer.com/docs>
+- Camelmailer docs: <https://camelmailer.com/docs>
 
 ## License
 
