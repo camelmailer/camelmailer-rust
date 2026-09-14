@@ -70,13 +70,18 @@
 #![warn(missing_docs)]
 
 mod bounces;
+mod campaigns;
 mod dmarc;
 mod emails;
 mod error;
 mod http;
+mod inbound;
+mod layouts;
+mod logs;
 mod servers;
 mod stats;
 mod streams;
+mod subscribers;
 mod templates;
 mod types;
 
@@ -84,6 +89,10 @@ mod types;
 pub mod blocking;
 
 pub use bounces::{BounceList, Bounces, ListBouncesParams};
+pub use campaigns::{
+    Campaign, CampaignDetail, CampaignStats, CampaignStream, Campaigns, CreateAndSendCampaign,
+    CreateDraftCampaign, UpdateCampaign,
+};
 pub use dmarc::{
     Dmarc, DmarcParams, DmarcRecord, DmarcReport, DmarcReportDetail, DmarcReportList, DmarcSource,
     DmarcSummary,
@@ -92,11 +101,16 @@ pub use emails::{
     ActivityEvent, BatchEntry, BatchError, Delivery, Emails, ListMessagesParams, Message,
     MessageDetail, MessageList, RawMessage, SendEmailRequest, SendEmailRequestBuilder,
     SendRecipient, SendResult, SendTemplateRequest, SendTemplateRequestBuilder,
+    SendToStreamRequest, StreamSendResult,
 };
 pub use error::{Error, Result};
+pub use inbound::{Inbound, InboundList, ListInboundParams, RequeueResult};
+pub use layouts::{Layout, LayoutFields, LayoutLogo, Layouts};
+pub use logs::{ApiRequest, ListLogsParams, LogList, Logs, TagCount};
 pub use servers::{Ping, Server, Servers};
 pub use stats::{DeliveryStats, DomainQueue, Stats, StatsParams, StatsService};
 pub use streams::{CreateStreamRequest, Stream, Streams, UpdateStreamRequest};
+pub use subscribers::{AddSubscriber, DeleteResult, ImportResult, Subscriber, Subscribers};
 pub use templates::{RenderedTemplate, Template, TemplateFields, Templates};
 pub use types::{Address, Attachment, Headers, Pagination};
 
@@ -141,7 +155,10 @@ impl CamelMailer {
 
     /// Send and inspect messages.
     pub fn emails(&self) -> Emails<'_> {
-        Emails { http: &self.http }
+        Emails {
+            http: &self.http,
+            idempotency_key: None,
+        }
     }
 
     /// Manage and render templates.
@@ -167,6 +184,31 @@ impl CamelMailer {
     /// DMARC monitoring.
     pub fn dmarc(&self) -> Dmarc<'_> {
         Dmarc { http: &self.http }
+    }
+
+    /// Broadcast campaigns.
+    pub fn campaigns(&self) -> Campaigns<'_> {
+        Campaigns { http: &self.http }
+    }
+
+    /// Opt-in subscribers of a broadcast stream.
+    pub fn subscribers(&self) -> Subscribers<'_> {
+        Subscribers { http: &self.http }
+    }
+
+    /// Template layouts.
+    pub fn layouts(&self) -> Layouts<'_> {
+        Layouts { http: &self.http }
+    }
+
+    /// Inbound and held messages.
+    pub fn inbound(&self) -> Inbound<'_> {
+        Inbound { http: &self.http }
+    }
+
+    /// The server's request log and tag index.
+    pub fn logs(&self) -> Logs<'_> {
+        Logs { http: &self.http }
     }
 
     /// The authenticated server (show / ping).

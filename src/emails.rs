@@ -12,6 +12,35 @@ use crate::types::{Address, Attachment, Headers, Pagination};
 #[derive(Debug, Clone, Copy)]
 pub struct Emails<'a> {
     pub(crate) http: &'a Http,
+    /// Set by [`Emails::idempotent`]; applied to every send this service
+    /// performs.
+    pub(crate) idempotency_key: Option<&'a str>,
+}
+
+impl<'a> Emails<'a> {
+    /// Make the sends on this service replayable.
+    ///
+    /// Returns a view of the service that attaches `key` as the
+    /// `Idempotency-Key` header. Sending the same key with the same body
+    /// returns the original result instead of queuing a second copy;
+    /// the same key with a different body is refused with
+    /// `InvalidIdempotentRequest` (HTTP 409) rather than silently
+    /// ignored. Keys are scoped to the server and a completed result is
+    /// kept for 24 hours.
+    ///
+    /// ```no_run
+    /// # use camelmailer_rs::{CamelMailer, SendEmailRequest};
+    /// # async fn run() -> Result<(), camelmailer_rs::Error> {
+    /// # let client = CamelMailer::new("cm_xxxx");
+    /// # let request = SendEmailRequest::builder().from("a@acme.com").to("b@example.com").build();
+    /// client.emails().idempotent("order-4711").send(request).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn idempotent(mut self, key: &'a str) -> Self {
+        self.idempotency_key = Some(key);
+        self
+    }
 }
 
 impl Emails<'_> {
@@ -21,7 +50,31 @@ impl Emails<'_> {
     /// token per recipient.
     pub async fn send(&self, request: SendEmailRequest) -> Result<SendResult> {
         self.http
-            .post("/api/v2/server/messages", Some(&request))
+            .post_idempotent(
+                "/api/v2/server/messages",
+                Some(&request),
+                self.idempotency_key,
+            )
+            .await
+    }
+
+    /// Send the same content to every subscriber of a broadcast stream
+    /// (`POST /api/v2/server/streams/{permalink}/send`).
+    ///
+    /// Either give a subject with a body, or a template permalink with an
+    /// optional model. The result counts `queued` against `skipped`:
+    /// recipients past the per-request cap of 1000 are skipped rather
+    /// than queued, so a larger audience wants a campaign.
+    pub async fn send_to_stream(
+        &self,
+        permalink: &str,
+        request: SendToStreamRequest,
+    ) -> Result<StreamSendResult> {
+        self.http
+            .post(
+                &format!("/api/v2/server/streams/{permalink}/send"),
+                Some(&request),
+            )
             .await
     }
 
@@ -37,7 +90,11 @@ impl Emails<'_> {
         let requests: Vec<SendEmailRequest> = requests.into_iter().collect();
         let response: BatchResponse = self
             .http
-            .post("/api/v2/server/messages/batch", Some(&requests))
+            .post_idempotent(
+                "/api/v2/server/messages/batch",
+                Some(&requests),
+                self.idempotency_key,
+            )
             .await?;
         Ok(response.messages)
     }
@@ -46,7 +103,11 @@ impl Emails<'_> {
     /// (`POST /api/v2/server/messages/with_template`).
     pub async fn send_with_template(&self, request: SendTemplateRequest) -> Result<SendResult> {
         self.http
-            .post("/api/v2/server/messages/with_template", Some(&request))
+            .post_idempotent(
+                "/api/v2/server/messages/with_template",
+                Some(&request),
+                self.idempotency_key,
+            )
             .await
     }
 
@@ -59,9 +120,10 @@ impl Emails<'_> {
         let requests: Vec<SendTemplateRequest> = requests.into_iter().collect();
         let response: BatchResponse = self
             .http
-            .post(
+            .post_idempotent(
                 "/api/v2/server/messages/with_template/batch",
                 Some(&requests),
+                self.idempotency_key,
             )
             .await?;
         Ok(response.messages)
@@ -478,7 +540,91 @@ impl ListMessagesParams {
     }
 }
 
+/// Fields for [`Emails::send_to_stream`].
+///
+/// Give either a subject with a body, or a template permalink with an
+/// optional model.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct SendToStreamRequest {
+    /// Sender address.
+    pub from: String,
+    /// Message subject.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subject: Option<String>,
+    /// HTML part.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub html_body: Option<String>,
+    /// Plain-text part.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text_body: Option<String>,
+    /// Permalink of a stored template to render instead of the bodies.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub template: Option<String>,
+    /// Values for the template's `{{ variables }}`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub template_model: Option<Value>,
+    /// Free-form tag for filtering and stats.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tag: Option<String>,
+}
+
+impl SendToStreamRequest {
+    /// A broadcast from the given address.
+    pub fn new(from: impl Into<String>) -> Self {
+        Self {
+            from: from.into(),
+            ..Default::default()
+        }
+    }
+
+    /// Message subject.
+    pub fn subject(mut self, subject: impl Into<String>) -> Self {
+        self.subject = Some(subject.into());
+        self
+    }
+
+    /// HTML part.
+    pub fn html_body(mut self, html_body: impl Into<String>) -> Self {
+        self.html_body = Some(html_body.into());
+        self
+    }
+
+    /// Plain-text part.
+    pub fn text_body(mut self, text_body: impl Into<String>) -> Self {
+        self.text_body = Some(text_body.into());
+        self
+    }
+
+    /// Render a stored template instead of the bodies above.
+    pub fn template(mut self, permalink: impl Into<String>) -> Self {
+        self.template = Some(permalink.into());
+        self
+    }
+
+    /// Values for the template's `{{ variables }}`.
+    pub fn template_model(mut self, model: Value) -> Self {
+        self.template_model = Some(model);
+        self
+    }
+
+    /// Free-form tag.
+    pub fn tag(mut self, tag: impl Into<String>) -> Self {
+        self.tag = Some(tag.into());
+        self
+    }
+}
+
 // --------------------------------------------------------------- responses
+
+/// How a broadcast to a stream was split.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct StreamSendResult {
+    /// Recipients queued.
+    pub queued: i64,
+    /// Recipients past the per-request cap of 1000.
+    pub skipped: i64,
+}
 
 /// Result of sending one message.
 #[derive(Debug, Clone, Default, Deserialize)]
