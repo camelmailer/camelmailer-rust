@@ -10,6 +10,11 @@ use crate::error::{Error, Result};
 /// Header carrying the messaging (server) API key.
 pub(crate) const SERVER_API_KEY_HEADER: &str = "X-Server-API-Key";
 
+/// Header that makes a send replayable. It is a header rather than a
+/// body field because the body is what the server hashes to recognise
+/// the same request.
+pub(crate) const IDEMPOTENCY_KEY_HEADER: &str = "Idempotency-Key";
+
 /// How much of a non-envelope body to keep in error messages.
 const BODY_SNIPPET_LEN: usize = 512;
 
@@ -68,6 +73,22 @@ impl Http {
         self.request(Method::POST, path, None::<&()>, body).await
     }
 
+    /// POST with an optional `Idempotency-Key`.
+    pub(crate) async fn post_idempotent<T: DeserializeOwned>(
+        &self,
+        path: &str,
+        body: Option<&impl Serialize>,
+        idempotency_key: Option<&str>,
+    ) -> Result<T> {
+        self.send(Method::POST, path, None::<&()>, body, idempotency_key)
+            .await
+    }
+
+    pub(crate) async fn delete<T: DeserializeOwned>(&self, path: &str) -> Result<T> {
+        self.request(Method::DELETE, path, None::<&()>, None::<&()>)
+            .await
+    }
+
     pub(crate) async fn patch<T: DeserializeOwned>(
         &self,
         path: &str,
@@ -83,11 +104,25 @@ impl Http {
         query: Option<&impl Serialize>,
         body: Option<&impl Serialize>,
     ) -> Result<T> {
+        self.send(method, path, query, body, None).await
+    }
+
+    async fn send<T: DeserializeOwned>(
+        &self,
+        method: Method,
+        path: &str,
+        query: Option<&impl Serialize>,
+        body: Option<&impl Serialize>,
+        idempotency_key: Option<&str>,
+    ) -> Result<T> {
         let url = format!("{}{}", self.base_url, path);
         let mut request = self
             .client
             .request(method, url)
             .header(SERVER_API_KEY_HEADER, &self.api_key);
+        if let Some(key) = idempotency_key {
+            request = request.header(IDEMPOTENCY_KEY_HEADER, key);
+        }
         if let Some(query) = query {
             request = request.query(query);
         }

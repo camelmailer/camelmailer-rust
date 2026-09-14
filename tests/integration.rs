@@ -10,7 +10,10 @@
 //! cargo test --test integration -- --nocapture
 //! ```
 
-use camelmailer_rs::{CamelMailer, ListMessagesParams, SendEmailRequest, StatsParams};
+use camelmailer_rs::{
+    CamelMailer, ListInboundParams, ListLogsParams, ListMessagesParams, SendEmailRequest,
+    StatsParams,
+};
 
 fn live_client() -> Option<CamelMailer> {
     let api_key = std::env::var("CAMELMAILER_API_KEY").ok()?;
@@ -40,6 +43,28 @@ async fn live_roundtrip() {
     eprintln!("templates: {}", templates.len());
     let streams = client.streams().list().await.expect("streams");
     eprintln!("streams: {}", streams.len());
+    let campaigns = client.campaigns().list().await.expect("campaigns");
+    eprintln!("campaigns: {}", campaigns.len());
+    let layouts = client.layouts().list().await.expect("layouts");
+    eprintln!("layouts: {}", layouts.len());
+    let inbound = client
+        .inbound()
+        .list(ListInboundParams::new().per_page(1))
+        .await
+        .expect("inbound");
+    eprintln!(
+        "inbound: {} of {}",
+        inbound.inbound.len(),
+        inbound.pagination.total
+    );
+    let logs = client
+        .logs()
+        .list(ListLogsParams::new().per_page(1))
+        .await
+        .expect("logs");
+    eprintln!("logged requests: {}", logs.pagination.total);
+    let tags = client.logs().tags().await.expect("tags");
+    eprintln!("tags: {}", tags.len());
 
     // 3. Optionally, send a real message and read it back.
     let (Ok(from), Ok(to)) = (

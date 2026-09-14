@@ -97,6 +97,42 @@ for entry in &entries {
 # Ok(()) }
 ```
 
+### Idempotent sending
+
+The same key with the same body returns the original result instead of
+queuing a second copy, and a different body under the same key is refused
+with `InvalidIdempotentRequest`. All four send methods pick the key up:
+
+```rust,no_run
+# use camelmailer_rs::*;
+# async fn run(client: CamelMailer) -> Result<()> {
+let request = SendEmailRequest::builder()
+    .from("billing@acme.com")
+    .to("ada@example.com")
+    .subject("Your receipt")
+    .build();
+
+client.emails().idempotent("order-4711").send(request).await?;
+# Ok(()) }
+```
+
+### Broadcasting to a stream
+
+```rust,no_run
+# use camelmailer_rs::*;
+# async fn run(client: CamelMailer) -> Result<()> {
+let result = client.emails().send_to_stream(
+    "newsletter",
+    SendToStreamRequest::new("news@acme.com")
+        .subject("September")
+        .text_body("What shipped this month."),
+).await?;
+// Recipients past the per-request cap of 1000 come back as `skipped`,
+// so a larger audience wants a campaign.
+println!("queued {}, skipped {}", result.queued, result.skipped);
+# Ok(()) }
+```
+
 ## Templates
 
 ```rust,no_run
@@ -118,6 +154,81 @@ let result = client.emails().send_with_template(
         .model(json!({ "name": "Ada", "product": "Acme" }))
         .build(),
 ).await?;
+# Ok(()) }
+```
+
+## Campaigns
+
+A campaign is content plus an audience. The two ways to create one behave
+differently, so pick deliberately: `create_draft` writes it and waits,
+`create_and_send` expands it to the stream's subscribers before the call
+returns.
+
+```rust,no_run
+# use camelmailer_rs::*;
+# async fn run(client: CamelMailer) -> Result<()> {
+// Write it and leave it alone. Without a schedule it stays a draft; with
+// one it becomes `scheduled` and the server sends it when due.
+let draft = client.campaigns().create_draft(
+    CreateDraftCampaign::new("newsletter", "news@acme.com")
+        .name("September")
+        .subject("What shipped")
+        .text_body("Hello."),
+).await?;
+
+// Goes out on the spot, no draft and no schedule.
+client.campaigns().create_and_send(
+    "newsletter",
+    CreateAndSendCampaign::new("Status update")
+        .from("news@acme.com")
+        .text_body("All clear."),
+).await?;
+
+let detail = client.campaigns().get(draft.id).await?;   // campaign + stats
+println!("delivered {} of {}", detail.stats.delivered, detail.stats.total);
+
+// `scheduled_at` schedules; `clear_schedule` drops it back to a draft.
+// Touching neither leaves the schedule standing, so the two are separate.
+client.campaigns().update(draft.id, UpdateCampaign::new().scheduled_at("2026-10-01T08:00:00Z")).await?;
+client.campaigns().update(draft.id, UpdateCampaign::new().clear_schedule()).await?;
+
+client.campaigns().send(draft.id).await?;    // now, whatever the schedule said
+client.campaigns().cancel(draft.id).await?;
+# Ok(()) }
+```
+
+## Subscribers, layouts, inbound and logs
+
+```rust,no_run
+# use camelmailer_rs::*;
+# async fn run(client: CamelMailer) -> Result<()> {
+// A broadcast send to an address that is not subscribed is refused, so
+// this list is the audience.
+client.subscribers().add("newsletter", AddSubscriber::new("ada@example.com").name("Ada")).await?;
+client.subscribers().import("newsletter", ["ada@example.com", "grace@example.com"]).await?;
+client.subscribers().complaint("newsletter", "ada@example.com").await?;  // suppress + unsubscribe
+client.subscribers().remove("newsletter", "ada@example.com").await?;
+
+// A layout wraps every template that uses it. `html_wrapper` has to embed
+// the body with `{{{ content }}}`.
+client.layouts().create(
+    LayoutFields::new()
+        .name("Default")
+        .permalink("default")
+        .html_wrapper("<html><body>{{{ content }}}</body></html>"),
+).await?;
+let logo = client.layouts().upload_logo("default", "data:image/png;base64,...").await?;
+println!("logo at {}", logo.url);
+
+// Inbound mail and outbound mail the spam filter put on hold.
+let held = client.inbound().list(ListInboundParams::new().status("held")).await?;
+client.inbound().retry(55).await?;   // back on the delivery queue
+client.inbound().bypass(55).await?;  // release past the hold
+
+// Useful when a send did not arrive and the question is whether the
+// request ever reached the API.
+let logs = client.logs().list(ListLogsParams::new().per_page(25)).await?;
+let tags = client.logs().tags().await?;
 # Ok(()) }
 ```
 
