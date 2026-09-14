@@ -563,9 +563,6 @@ pub struct SendToStreamRequest {
     /// Values for the template's `{{ variables }}`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub template_model: Option<Value>,
-    /// Free-form tag for filtering and stats.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tag: Option<String>,
 }
 
 impl SendToStreamRequest {
@@ -604,12 +601,6 @@ impl SendToStreamRequest {
     /// Values for the template's `{{ variables }}`.
     pub fn template_model(mut self, model: Value) -> Self {
         self.template_model = Some(model);
-        self
-    }
-
-    /// Free-form tag.
-    pub fn tag(mut self, tag: impl Into<String>) -> Self {
-        self.tag = Some(tag.into());
         self
     }
 }

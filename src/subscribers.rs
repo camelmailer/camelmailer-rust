@@ -105,9 +105,6 @@ fn encode(address: &str) -> String {
 pub struct AddSubscriber {
     /// The email address.
     pub address: String,
-    /// Optional display name.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,
     /// `subscribed` (default) or `unsubscribed`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<String>,
@@ -120,12 +117,6 @@ impl AddSubscriber {
             address: address.into(),
             ..Default::default()
         }
-    }
-
-    /// Display name.
-    pub fn name(mut self, name: impl Into<String>) -> Self {
-        self.name = Some(name.into());
-        self
     }
 
     /// `subscribed` or `unsubscribed`.
@@ -166,8 +157,6 @@ pub struct Subscriber {
     pub id: i64,
     /// The email address.
     pub address: String,
-    /// Optional display name.
-    pub name: Option<String>,
     /// `subscribed` or `unsubscribed`.
     pub status: String,
     /// When the subscription row was created.

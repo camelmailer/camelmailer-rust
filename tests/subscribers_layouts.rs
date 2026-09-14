@@ -37,7 +37,7 @@ async fn subscribers_add_upserts_by_address() {
     Mock::given(method("POST"))
         .and(path("/api/v2/server/streams/product-news/subscribers"))
         .and(body_json(
-            json!({ "address": "ada@example.com", "name": "Ada" }),
+            json!({ "address": "ada@example.com", "status": "subscribed" }),
         ))
         .respond_with(ResponseTemplate::new(201).set_body_json(success(json!({
             "subscriber": { "id": 1, "address": "ada@example.com", "status": "subscribed" },
@@ -49,7 +49,7 @@ async fn subscribers_add_upserts_by_address() {
         .subscribers()
         .add(
             "product-news",
-            AddSubscriber::new("ada@example.com").name("Ada"),
+            AddSubscriber::new("ada@example.com").status("subscribed"),
         )
         .await
         .unwrap();

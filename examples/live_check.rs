@@ -100,7 +100,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "add",
         client
             .subscribers()
-            .add(&stream, AddSubscriber::new(&plus).name("Ada"))
+            .add(&stream, AddSubscriber::new(&plus))
             .await,
         |s| s.status.clone(),
     );
@@ -342,6 +342,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     t.step("tags", client.logs().tags().await, |t| {
         format!("{} tags", t.len())
     });
+    let inbound = client
+        .inbound()
+        .list(ListInboundParams::new().per_page(1))
+        .await;
+    if let Ok(page) = &inbound {
+        if let Some(first) = page.inbound.first() {
+            t.step(
+                "inbound retry",
+                client.inbound().retry(first.id).await,
+                |r| format!("requeued={} message={}", r.requeued, r.message.id),
+            );
+        }
+    }
 
     println!("\nblocking mirror");
     let blocking_stream = stream.clone();
