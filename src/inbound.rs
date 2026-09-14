@@ -123,8 +123,11 @@ pub struct InboundList {
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default)]
 pub struct RequeueResult {
-    /// Whether the message went back on the delivery queue.
-    pub queued: bool,
+    /// Whether the message went back on the delivery queue. The API names
+    /// this field `requeued`.
+    pub requeued: bool,
+    /// The message as it now stands.
+    pub message: Message,
 }
 
 #[derive(Debug, Deserialize)]

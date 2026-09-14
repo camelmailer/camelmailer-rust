@@ -51,20 +51,24 @@ async fn inbound_get_unwraps_the_message() {
 #[tokio::test]
 async fn inbound_retry_and_bypass() {
     let server = MockServer::start().await;
+    // The API names this `requeued`, and answers with the message too.
+    let body = json!({ "requeued": true, "message": { "id": 55, "status": "Pending" } });
     Mock::given(method("POST"))
         .and(path("/api/v2/server/inbound/55/retry"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(success(json!({ "queued": true }))))
+        .respond_with(ResponseTemplate::new(200).set_body_json(success(body.clone())))
         .mount(&server)
         .await;
     Mock::given(method("POST"))
         .and(path("/api/v2/server/inbound/55/bypass"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(success(json!({ "queued": true }))))
+        .respond_with(ResponseTemplate::new(200).set_body_json(success(body)))
         .mount(&server)
         .await;
 
     let client = client(&server);
-    assert!(client.inbound().retry(55).await.unwrap().queued);
-    assert!(client.inbound().bypass(55).await.unwrap().queued);
+    let retried = client.inbound().retry(55).await.unwrap();
+    assert!(retried.requeued);
+    assert_eq!(retried.message.id, 55);
+    assert!(client.inbound().bypass(55).await.unwrap().requeued);
 }
 
 #[tokio::test]
