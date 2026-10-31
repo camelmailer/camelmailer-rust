@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-31
+
+### Added
+
+- Inline images: `Attachment` has an optional `content_id`, and
+  `Attachment::inline(name, content_type, content_id, bytes)` builds one.
+  The HTML body shows the part as `cid:<content_id>`. Needs Camelmailer
+  0.12 or newer.
+
+### Changed
+
+- `Attachment` has a new public field, so code that builds it as a struct
+  literal must add `content_id: None` (or use `Attachment::from_bytes`).
+
 ## [0.2.1] - 2026-09-14
 
 ### Fixed

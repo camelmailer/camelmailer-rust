@@ -79,9 +79,28 @@ pub struct Attachment {
     pub content_type: String,
     /// Base64-encoded file content.
     pub data_base64: String,
+    /// Makes the part inline: the HTML body shows it as `cid:<content_id>`,
+    /// for a logo for example. Letters, digits and `.-_@+$`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_id: Option<String>,
 }
 
 impl Attachment {
+    /// An inline part the HTML body shows as `cid:<content_id>`, for a logo
+    /// or another image (encodes the bytes as base64). Mail clients show it
+    /// in place and do not list it as an attachment.
+    pub fn inline(
+        name: impl Into<String>,
+        content_type: impl Into<String>,
+        content_id: impl Into<String>,
+        bytes: impl AsRef<[u8]>,
+    ) -> Self {
+        Self {
+            content_id: Some(content_id.into()),
+            ..Self::from_bytes(name, content_type, bytes)
+        }
+    }
+
     /// Build an attachment from raw bytes (encodes them as base64).
     pub fn from_bytes(
         name: impl Into<String>,
@@ -93,6 +112,7 @@ impl Attachment {
             name: name.into(),
             content_type: content_type.into(),
             data_base64: base64::engine::general_purpose::STANDARD.encode(bytes.as_ref()),
+            content_id: None,
         }
     }
 
@@ -106,6 +126,7 @@ impl Attachment {
             name: name.into(),
             content_type: content_type.into(),
             data_base64: data_base64.into(),
+            content_id: None,
         }
     }
 }
@@ -144,5 +165,27 @@ mod tests {
     fn attachment_from_bytes_encodes_base64() {
         let attachment = Attachment::from_bytes("hi.txt", "text/plain", b"hello");
         assert_eq!(attachment.data_base64, "aGVsbG8=");
+    }
+}
+
+#[cfg(test)]
+mod attachment_tests {
+    use super::Attachment;
+
+    #[test]
+    fn inline_parts_carry_a_content_id_and_plain_attachments_none() {
+        let inline = serde_json::to_value(Attachment::inline(
+            "logo.png",
+            "image/png",
+            "logo@acme.example",
+            [1, 2, 3],
+        ))
+        .unwrap();
+        assert_eq!(inline["content_id"], "logo@acme.example");
+        assert_eq!(inline["data_base64"], "AQID");
+
+        let plain =
+            serde_json::to_value(Attachment::from_bytes("a.pdf", "application/pdf", [1])).unwrap();
+        assert!(plain.get("content_id").is_none());
     }
 }
